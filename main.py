@@ -1,13 +1,13 @@
 import os
 import secrets
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Depends, Request, Form, status
+from fastapi import FastAPI, HTTPException, Depends, Request, Form
 from fastapi.security import APIKeyHeader
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer, inspect, text
+from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "votre-clé-secrète")
 API_KEY = os.getenv("API_KEY", "clé-api-pour-le-logiciel-client")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
@@ -37,7 +36,7 @@ class License(Base):
     customer_name = Column(String, default="")
     notes = Column(String, default="")
 
-# Modèle de clé produit (Product Key)
+# Modèle de clé produit
 class ProductKey(Base):
     __tablename__ = "product_keys"
     id = Column(Integer, primary_key=True, index=True)
@@ -45,16 +44,15 @@ class ProductKey(Base):
     is_used = Column(Boolean, default=False)
     used_by_machine_id = Column(String, nullable=True)
     customer_name = Column(String, default="")
-    expires_at = Column(DateTime, nullable=True)  # None = illimité
+    expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# Création des tables (avec gestion des erreurs si elles existent)
-Base.metadata.create_all(bind=engine, checkfirst=True)
+# Création des tables
+Base.metadata.create_all(bind=engine)
 
-# FastAPI
 app = FastAPI(title="License Manager")
 
-# Templates et fichiers statiques
+# Templates
 templates = Jinja2Templates(directory="admin/templates")
 if os.path.exists("admin/static"):
     app.mount("/static", StaticFiles(directory="admin/static"), name="static")
@@ -91,10 +89,10 @@ class VerificationResponse(BaseModel):
     is_valid: bool
     message: str
 
-# --- Endpoints API (pour le logiciel) ---
+# --- API endpoints ---
 @app.post("/api/activate", response_model=LicenseResponse)
 def activate_license(request: ActivateWithKeyRequest, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
-    # Vérifier si cette machine a déjà une licence
+    # Vérifier si la machine a déjà une licence
     existing = db.query(License).filter(License.machine_id == request.machine_id).first()
     if existing:
         return LicenseResponse(
@@ -102,7 +100,6 @@ def activate_license(request: ActivateWithKeyRequest, db: Session = Depends(get_
             expires_at=existing.expires_at,
             is_valid=existing.is_active and existing.expires_at > datetime.utcnow()
         )
-    
     # Vérifier la clé produit
     key_entry = db.query(ProductKey).filter(ProductKey.key == request.product_key).first()
     if not key_entry:
@@ -111,14 +108,12 @@ def activate_license(request: ActivateWithKeyRequest, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Clé déjà utilisée")
     if key_entry.expires_at and key_entry.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Clé expirée")
-    
-    # Marquer la clé comme utilisée
+    # Marquer comme utilisée
     key_entry.is_used = True
     key_entry.used_by_machine_id = request.machine_id
-    
     # Créer la licence
     license_key = secrets.token_hex(16)
-    expires_at = key_entry.expires_at or (datetime.utcnow() + timedelta(days=36500))  # 100 ans
+    expires_at = key_entry.expires_at or (datetime.utcnow() + timedelta(days=36500))
     new_license = License(
         machine_id=request.machine_id,
         license_key=license_key,
@@ -128,11 +123,7 @@ def activate_license(request: ActivateWithKeyRequest, db: Session = Depends(get_
     db.add(new_license)
     db.commit()
     db.refresh(new_license)
-    return LicenseResponse(
-        license_key=license_key,
-        expires_at=expires_at,
-        is_valid=True
-    )
+    return LicenseResponse(license_key=license_key, expires_at=expires_at, is_valid=True)
 
 @app.post("/api/verify", response_model=VerificationResponse)
 def verify_license(request: VerificationRequest, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
@@ -152,12 +143,9 @@ def verify_license(request: VerificationRequest, db: Session = Depends(get_db), 
 def health_check():
     return {"status": "ok"}
 
-# --- Interface d’administration (web) ---
+# --- Interface admin ---
 def verify_admin(request: Request):
-    admin_auth = request.cookies.get("admin_auth")
-    if admin_auth != ADMIN_PASSWORD:
-        return False
-    return True
+    return request.cookies.get("admin_auth") == ADMIN_PASSWORD
 
 @app.get("/admin/login", response_class=HTMLResponse)
 def admin_login_form(request: Request):
@@ -179,11 +167,14 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("dashboard.html", {"request": request, "licenses": licenses})
 
 @app.get("/admin/keys", response_class=HTMLResponse)
-def admin_keys_page(request: Request, db: Session = Depends(get_db)):
+def admin_keys(request: Request, db: Session = Depends(get_db)):
     if not verify_admin(request):
         return RedirectResponse(url="/admin/login", status_code=302)
     keys = db.query(ProductKey).all()
-    return templates.TemplateResponse("keys.html", {"request": request, "keys": keys})
+    try:
+        return templates.TemplateResponse("keys.html", {"request": request, "keys": keys})
+    except Exception as e:
+        return HTMLResponse(f"Erreur template: {str(e)}", status_code=500)
 
 @app.post("/admin/generate_key")
 def generate_key(request: Request, customer_name: str = Form(...), days_valid: int = Form(0), db: Session = Depends(get_db)):
@@ -193,22 +184,18 @@ def generate_key(request: Request, customer_name: str = Form(...), days_valid: i
     expires_at = None
     if days_valid > 0:
         expires_at = datetime.utcnow() + timedelta(days=days_valid)
-    product_key = ProductKey(
-        key=new_key,
-        customer_name=customer_name,
-        expires_at=expires_at
-    )
+    product_key = ProductKey(key=new_key, customer_name=customer_name, expires_at=expires_at)
     db.add(product_key)
     db.commit()
     return RedirectResponse(url="/admin/keys", status_code=302)
 
 @app.get("/admin/logout")
-def admin_logout(request: Request):
+def admin_logout():
     response = RedirectResponse(url="/admin/login", status_code=302)
     response.delete_cookie("admin_auth")
     return response
 
-# Ajouter une route pour voir les licences et les clés (optionnel)
+# Routes supplémentaires pour modifier/supprimer les licences (inchangées)
 @app.get("/admin/license/{license_id}/edit", response_class=HTMLResponse)
 def edit_license_form(request: Request, license_id: int, db: Session = Depends(get_db)):
     if not verify_admin(request):
@@ -219,26 +206,17 @@ def edit_license_form(request: Request, license_id: int, db: Session = Depends(g
     return templates.TemplateResponse("edit_license.html", {"request": request, "license": license_entry})
 
 @app.post("/admin/license/{license_id}/edit")
-def update_license(
-    request: Request,
-    license_id: int,
-    customer_name: str = Form(...),
-    days_valid: int = Form(...),
-    is_active: bool = Form(False),
-    notes: str = Form(""),
-    db: Session = Depends(get_db)
-):
+def update_license(request: Request, license_id: int, customer_name: str = Form(...), days_valid: int = Form(...),
+                   is_active: bool = Form(False), notes: str = Form(""), db: Session = Depends(get_db)):
     if not verify_admin(request):
         return RedirectResponse(url="/admin/login", status_code=302)
     license_entry = db.query(License).filter(License.id == license_id).first()
-    if not license_entry:
-        return RedirectResponse(url="/admin/dashboard", status_code=302)
-    license_entry.customer_name = customer_name
-    license_entry.notes = notes
-    license_entry.is_active = is_active
-    new_expires = datetime.utcnow() + timedelta(days=days_valid)
-    license_entry.expires_at = new_expires
-    db.commit()
+    if license_entry:
+        license_entry.customer_name = customer_name
+        license_entry.notes = notes
+        license_entry.is_active = is_active
+        license_entry.expires_at = datetime.utcnow() + timedelta(days=days_valid)
+        db.commit()
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 @app.get("/admin/license/{license_id}/revoke")
