@@ -1,25 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>🔑 Gestion des clés produit</h1>
-<form method="post" action="/admin/generate_key">
-    <label>Nom du client :</label><br>
-    <input type="text" name="customer_name" required><br><br>
-    <label>Durée (jours, 0 = illimité) :</label><br>
-    <input type="number" name="days_valid" value="365" min="0"><br><br>
-    <button type="submit">Générer</button>
-</form>
+
+<!-- Formulaire de génération (doit être en POST) -->
+<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+    <h2>Générer une nouvelle clé</h2>
+    <form method="post" action="/admin/generate_key">
+        <label>Nom du client :</label><br>
+        <input type="text" name="customer_name" required style="width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px;"><br>
+        <label>Durée de validité (jours, 0 = illimité) :</label><br>
+        <input type="number" name="days_valid" value="365" min="0" style="width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px;"><br>
+        <button type="submit" style="background-color: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">🔑 Générer la clé</button>
+    </form>
+</div>
+
 <h2>Clés existantes</h2>
-<table border="1">
-    <tr><th>ID</th><th>Clé</th><th>Client</th><th>Expiration</th><th>Utilisée</th></tr>
-    {% for k in keys %}
-    <tr>
-        <td>{{ k.id }}</td>
-        <td><code>{{ k.key }}</code></td>
-        <td>{{ k.customer_name }}</td>
-        <td>{{ k.expires_at.strftime('%Y-%m-%d') if k.expires_at else 'Illimitée' }}</td>
-        <td>{{ 'Oui' if k.is_used else 'Non' }}</td>
-    </tr>
-    {% endfor %}
+<table border="1" style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr><th>ID</th><th>Clé</th><th>Client</th><th>Expiration</th><th>Utilisée ?</th><th>Machine ID</th></tr>
+    </thead>
+    <tbody>
+        {% for k in keys %}
+        <tr>
+            <td>{{ k.id }}</td>
+            <td><code>{{ k.key }}</code></td>
+            <td>{{ k.customer_name }}</td>
+            <td>{{ k.expires_at.strftime('%Y-%m-%d') if k.expires_at else 'Illimitée' }}</td>
+            <td>{{ '✅ Oui' if k.is_used else '❌ Non' }}</td>
+            <td>{{ k.used_by_machine_id if k.used_by_machine_id else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
 </table>
-<a href="/admin/dashboard">← Retour</a>
+
+<br>
+<a href="/admin/dashboard" class="btn">← Retour au tableau de bord</a>
 {% endblock %}
