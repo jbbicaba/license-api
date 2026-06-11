@@ -22,6 +22,15 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 # Base de données
 SQLALCHEMY_DATABASE_URL = "sqlite:///./licenses.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+
+# ==========================================
+# SUPPRIMER L'ANCIENNE BASE DE DONNÉES (TEMPORAIRE)
+# ==========================================
+if os.path.exists("licenses.db"):
+    os.remove("licenses.db")
+    print("Ancienne base de données supprimée. Une nouvelle sera créée.")
+# ==========================================
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -37,58 +46,15 @@ class License(Base):
     customer_name = Column(String, default="")
     notes = Column(String, default="")
 
-# --- Migration automatique de la base de données ---
+# --- Migration (plus nécessaire car base neuve) ---
 def migrate_database(engine):
-    """Met à jour le schéma de la base de données si nécessaire."""
-    inspector = inspect(engine)
-    if not inspector.has_table("licenses"):
-        return
+    pass
 
-    columns = [col['name'] for col in inspector.get_columns('licenses')]
-    # Si la colonne 'id' n'existe pas, on doit recréer la table
-    if 'id' not in columns:
-        print("Ancienne version de la base détectée. Migration en cours...")
-        with engine.connect() as conn:
-            # 1. Renommer l'ancienne table
-            conn.execute(text("ALTER TABLE licenses RENAME TO licenses_old"))
-            conn.commit()
-
-        # 2. Créer la nouvelle table avec le bon schéma
-        Base.metadata.create_all(bind=engine)
-
-        # 3. Copier les données existantes
-        with engine.connect() as conn:
-            conn.execute(text("""
-                INSERT INTO licenses (machine_id, license_key, expires_at, is_active, created_at)
-                SELECT machine_id, license_key, expires_at, is_active, created_at FROM licenses_old
-            """))
-            conn.commit()
-            # 4. Supprimer l'ancienne table
-            conn.execute(text("DROP TABLE licenses_old"))
-            conn.commit()
-        print("Migration terminée avec succès.")
-    else:
-        # Si la table a déjà 'id' mais pas les autres colonnes, on les ajoute
-        with engine.connect() as conn:
-            if 'customer_name' not in columns:
-                conn.execute(text("ALTER TABLE licenses ADD COLUMN customer_name TEXT DEFAULT ''"))
-            if 'notes' not in columns:
-                conn.execute(text("ALTER TABLE licenses ADD COLUMN notes TEXT DEFAULT ''"))
-            conn.commit()
-
-# Exécuter la migration
 migrate_database(engine)
 
-# Création sécurisée des tables et index (ignore les erreurs d'index déjà existants)
-try:
-    Base.metadata.create_all(bind=engine, checkfirst=True)
-    print("✅ Base de données et index créés avec succès.")
-except Exception as e:
-    error_msg = str(e)
-    if "already exists" in error_msg or "ix_licenses" in error_msg:
-        print("⚠️ Index/tables déjà présents, poursuite de l'exécution.")
-    else:
-        raise e
+# Création des tables et index
+Base.metadata.create_all(bind=engine)
+print("✅ Base de données et index créés avec succès.")
 
 # FastAPI
 app = FastAPI(title="License Manager")
@@ -98,7 +64,7 @@ templates = Jinja2Templates(directory="admin/templates")
 if os.path.exists("admin/static"):
     app.mount("/static", StaticFiles(directory="admin/static"), name="static")
 
-# Sécurité API (pour le logiciel)
+# Sécurité API
 api_key_header = APIKeyHeader(name="X-API-Key")
 def verify_api_key(api_key: str = Depends(api_key_header)):
     if api_key != API_KEY:
@@ -129,7 +95,7 @@ class VerificationResponse(BaseModel):
     is_valid: bool
     message: str
 
-# --- Endpoints API (pour le logiciel) ---
+# --- Endpoints API ---
 @app.post("/api/activate", response_model=LicenseResponse)
 def activate_license(request: LicenseRequest, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
     existing = db.query(License).filter(License.machine_id == request.machine_id).first()
@@ -173,7 +139,7 @@ def verify_license(request: VerificationRequest, db: Session = Depends(get_db), 
 def health_check():
     return {"status": "ok"}
 
-# --- Interface d’administration (web) ---
+# --- Interface d’administration ---
 def verify_admin(request: Request, db: Session = Depends(get_db)):
     admin_auth = request.cookies.get("admin_auth")
     if admin_auth != ADMIN_PASSWORD:
