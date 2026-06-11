@@ -81,11 +81,12 @@ migrate_database(engine)
 
 # Création sécurisée des tables et index (ignore les erreurs d'index déjà existants)
 try:
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     print("✅ Base de données et index créés avec succès.")
 except Exception as e:
-    if "already exists" in str(e):
-        print("⚠️ Index déjà existant – création ignorée. L'application va continuer.")
+    error_msg = str(e)
+    if "already exists" in error_msg or "ix_licenses" in error_msg:
+        print("⚠️ Index/tables déjà présents, poursuite de l'exécution.")
     else:
         raise e
 
