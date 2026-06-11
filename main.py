@@ -17,7 +17,7 @@ load_dotenv()
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "votre-clé-secrète")
 API_KEY = os.getenv("API_KEY", "clé-api-pour-le-logiciel-client")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Mot de passe pour l’admin
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 # Base de données
 SQLALCHEMY_DATABASE_URL = "sqlite:///./licenses.db"
@@ -76,9 +76,18 @@ def migrate_database(engine):
                 conn.execute(text("ALTER TABLE licenses ADD COLUMN notes TEXT DEFAULT ''"))
             conn.commit()
 
-# Exécuter la migration avant de créer les tables
+# Exécuter la migration
 migrate_database(engine)
-Base.metadata.create_all(bind=engine)
+
+# Création sécurisée des tables et index (ignore les erreurs d'index déjà existants)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ Base de données et index créés avec succès.")
+except Exception as e:
+    if "already exists" in str(e):
+        print("⚠️ Index déjà existant – création ignorée. L'application va continuer.")
+    else:
+        raise e
 
 # FastAPI
 app = FastAPI(title="License Manager")
@@ -209,7 +218,6 @@ def create_license(
     auth = request.cookies.get("admin_auth")
     if auth != ADMIN_PASSWORD:
         return RedirectResponse(url="/admin/login", status_code=302)
-    # Vérifier si machine_id existe déjà
     existing = db.query(License).filter(License.machine_id == machine_id).first()
     if existing:
         return templates.TemplateResponse("edit_license.html", {
@@ -259,7 +267,6 @@ def update_license(
     license_entry.customer_name = customer_name
     license_entry.notes = notes
     license_entry.is_active = is_active
-    # Mettre à jour la date d'expiration
     new_expires = datetime.utcnow() + timedelta(days=days_valid)
     license_entry.expires_at = new_expires
     db.commit()
