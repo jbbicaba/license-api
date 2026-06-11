@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer
+from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
@@ -37,6 +37,47 @@ class License(Base):
     customer_name = Column(String, default="")
     notes = Column(String, default="")
 
+# --- Migration automatique de la base de données ---
+def migrate_database(engine):
+    """Met à jour le schéma de la base de données si nécessaire."""
+    inspector = inspect(engine)
+    if not inspector.has_table("licenses"):
+        return
+
+    columns = [col['name'] for col in inspector.get_columns('licenses')]
+    # Si la colonne 'id' n'existe pas, on doit recréer la table
+    if 'id' not in columns:
+        print("Ancienne version de la base détectée. Migration en cours...")
+        with engine.connect() as conn:
+            # 1. Renommer l'ancienne table
+            conn.execute(text("ALTER TABLE licenses RENAME TO licenses_old"))
+            conn.commit()
+
+        # 2. Créer la nouvelle table avec le bon schéma
+        Base.metadata.create_all(bind=engine)
+
+        # 3. Copier les données existantes
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO licenses (machine_id, license_key, expires_at, is_active, created_at)
+                SELECT machine_id, license_key, expires_at, is_active, created_at FROM licenses_old
+            """))
+            conn.commit()
+            # 4. Supprimer l'ancienne table
+            conn.execute(text("DROP TABLE licenses_old"))
+            conn.commit()
+        print("Migration terminée avec succès.")
+    else:
+        # Si la table a déjà 'id' mais pas les autres colonnes, on les ajoute
+        with engine.connect() as conn:
+            if 'customer_name' not in columns:
+                conn.execute(text("ALTER TABLE licenses ADD COLUMN customer_name TEXT DEFAULT ''"))
+            if 'notes' not in columns:
+                conn.execute(text("ALTER TABLE licenses ADD COLUMN notes TEXT DEFAULT ''"))
+            conn.commit()
+
+# Exécuter la migration avant de créer les tables
+migrate_database(engine)
 Base.metadata.create_all(bind=engine)
 
 # FastAPI
