@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Connexion administration</h1>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<form method="post">
+    <input type="password" name="password" placeholder="Mot de passe" required>
+    <button type="submit">Se connecter</button>
+</form>
+{% endblock %}

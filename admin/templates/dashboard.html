@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Licences actives</h1>
+<a href="/admin/license/new" class="btn">+ Nouvelle licence</a>
+<br><br>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th><th>Client</th><th>Machine ID</th><th>Clé</th><th>Expiration</th><th>Active</th><th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lic in licenses %}
+        <tr>
+            <td>{{ lic.id }}</td>
+            <td>{{ lic.customer_name }}</td>
+            <td>{{ lic.machine_id[:20] }}...</td>
+            <td>{{ lic.license_key[:16] }}...</td>
+            <td>{{ lic.expires_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ "✅" if lic.is_active else "❌" }}</td>
+            <td>
+                <a href="/admin/license/{{ lic.id }}/edit" class="btn btn-sm">✏️</a>
+                <a href="/admin/license/{{ lic.id }}/revoke" class="btn btn-sm btn-warning">🚫</a>
+                <a href="/admin/license/{{ lic.id }}/delete" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer définitivement ?')">🗑️</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

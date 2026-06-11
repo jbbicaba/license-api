@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ "Modifier" if license else "Nouvelle licence" }}</h1>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<form method="post">
+    <label>Nom du client :</label><br>
+    <input type="text" name="customer_name" value="{{ license.customer_name if license else '' }}" required><br><br>
+    <label>Machine ID :</label><br>
+    <input type="text" name="machine_id" value="{{ license.machine_id if license else '' }}" {% if license %}readonly{% endif %} required><br>
+    <small>{% if license %}Non modifiable après création{% endif %}</small><br><br>
+    <label>Durée de validité (jours) :</label><br>
+    <input type="number" name="days_valid" value="365" required><br><br>
+    <label>Notes :</label><br>
+    <textarea name="notes" rows="3">{{ license.notes if license else '' }}</textarea><br><br>
+    {% if license %}
+    <label>
+        <input type="checkbox" name="is_active" {% if license.is_active %}checked{% endif %}> Active
+    </label><br><br>
+    {% endif %}
+    <button type="submit" class="btn">Enregistrer</button>
+    <a href="/admin/dashboard">Annuler</a>
+</form>
+{% endblock %}
