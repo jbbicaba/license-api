@@ -1,12 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Licences actives</h1>
-<a href="/admin/license/new" class="btn">+ Nouvelle licence</a>
-<br><br>
-<table>
+
+<div style="margin-bottom: 20px;">
+    <a href="/admin/license/new" class="btn">+ Nouvelle licence</a>
+    <a href="/admin/keys" class="btn" style="margin-left: 10px;">🔑 Gérer les clés produit</a>
+</div>
+
+<table border="1" style="width: 100%; border-collapse: collapse;">
     <thead>
         <tr>
-            <th>ID</th><th>Client</th><th>Machine ID</th><th>Clé</th><th>Expiration</th><th>Active</th><th>Actions</th>
+            <th>ID</th>
+            <th>Client</th>
+            <th>Machine ID</th>
+            <th>Clé</th>
+            <th>Expiration</th>
+            <th>Active</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
